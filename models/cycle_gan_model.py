@@ -44,47 +44,6 @@ def yolo_data_transform(img, img_size=416, normalized_labels=True):
         return resize(img, img_size) 
 
 
-
-
-
-
-# def crop_img_by_bbox(img, bboxes, img_size_resnet=224):
-#     '''
-#     note: need to scale bboxes, so need to check the cones cropped
-
-#     args:
-#         img: an image shape(c, w, h) !?
-#         bboxes: a list of bboxes
-
-#     return:
-#         list_objects: list of cropped objects e.g. traffic cones
-#     '''
-#     _, _, w_tmp, h_tmp = img.shape
-#     # if w_tmp < 416 or h_tmp < 416:
-#     #     img = resize(img, 416)
-#     ori_h = 1080
-#     ori_w = 1920
-#     # covert synthetic images back to original size, to crop cone easily
-#     img = F.interpolate(img, size=(ori_h, ori_w), mode="nearest")
-#     list_objects = []
-#     for i, bbox in enumerate(bboxes):
-#         #print('bbox: ', bbox)
-#         x, y, w, h = bbox[2:]
-#         x_min, y_min, x_max, y_max = coco2voc(x, y, w, h)
-
-#         #x_min, y_min, x_max, y_max = scale_bbox(bbox, img_size_resnet)
-#         #area = (x_min, y_min, x_max, y_max)
-#         cone = img[..., y_min:y_max, x_min:x_max]
-#         print('img: ', img.shape)
-#         print('cone: ', cone.shape)
-#         cone = resize(cone, img_size_resnet)
-#         save_image(cone, '/home/basic/cyclegan/data/tmp/cone%s.png' %(i))
-#         save_image(img, '/home/basic/cyclegan/data/tmp/img%s.png' %(i))
-
-#         list_objects.append(cone)
-
-#     return list_objects
-
 class CycleGANModel(BaseModel):
     def name(self):
         return 'CycleGANModel'
