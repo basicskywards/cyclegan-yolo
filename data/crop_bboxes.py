@@ -75,18 +75,34 @@ def get_img_label_paths(img_path_txt, synthetic=True):
 	for path in img_files:
 		img_id = path.split('/')[-1].split('.')[0]
 		if synthetic:
-			label_path_tmp = '/home/basic/PyTorch-YOLOv3/data/traffic_cones_syn_yololoss/labels/'
+			#label_path_tmp = '/home/basic/PyTorch-YOLOv3/data/traffic_cones_syn_yololoss/labels/'
+			label_path_tmp = '/media/basic/ssd256/traffic_cone_syn/labels/'
 		else:
 		# real
-			label_path_tmp = '/home/basic/PyTorch-YOLOv3/data/traffic_cones/labels/'
-
+			#label_path_tmp = '/home/basic/PyTorch-YOLOv3/data/traffic_cones/labels/'
+			label_path_tmp = '/media/basic/ssd256/traffic_cone_real/labels/'
 		label_path = label_path_tmp + img_id + '.txt'
 		label_files.append(label_path)
 	return img_files, label_files
 
+def img_path2label_path(img_path, synthetic=True):
+	img_id = img_path.split('/')[-1].split('.')[0]
+	if synthetic:
+		#label_path_tmp = '/home/basic/PyTorch-YOLOv3/data/traffic_cones_syn_yololoss/labels/'
+		label_path_tmp = '/media/basic/ssd256/traffic_cone_syn/labels/'
+	else:
+	# real
+		#label_path_tmp = '/home/basic/PyTorch-YOLOv3/data/traffic_cones/labels/'
+		label_path_tmp = '/media/basic/ssd256/traffic_cone_real/labels/'
+	label_path = label_path_tmp + img_id + '.txt'
+	return label_path
+
+
 def get_label(label_path):
 	if os.path.exists(label_path):
+		#print('\nlabel_path: ', label_path, type(label_path))
 		boxes = torch.from_numpy(np.loadtxt(label_path).reshape(-1, 5))
+		#print('\nboxes info: ', boxes)
 	return boxes
 
 def get_img(img_path):
@@ -129,7 +145,9 @@ def resize_img(image, size=416):
 def save_traffic_cone(image_tensor, image_path, idx):
 	# image_pil = Image.fromarray(image_numpy)
 	# image_pil.save(image_path)
+	#print('\n image_tensor: ', type(image_tensor))
 	try:
+		#transforms.ToPILImage()(image_tensor).show()
 		transforms.ToPILImage()(image_tensor).save(image_path + 'test%d.png' %(idx), mode='png')
 	except:
 		print('ValueError: tile cannot extend outside image')

@@ -14,7 +14,7 @@ from yolo.utils.datasets import pad_to_square, resize
 import torchvision.transforms as transforms
 from torchvision.utils import save_image
 import torch.nn.functional as F
-from data.crop_bboxes import bbox_rescale, resize_img, crop_object_by_bbox, save_traffic_cone, get_label
+from data.crop_bboxes import bbox_rescale, resize_img, crop_object_by_bbox, save_traffic_cone, get_label, img_path2label_path
 
 def mse_loss(input, target):
     return torch.sum((input - target)**2) / input.data.nelement()
@@ -237,6 +237,8 @@ class CycleGANModel(BaseModel):
         # print ('self.criterionFeat(self.netFeat(self.real_A), self.netFeat(self.fake_B)).parameters()', self.criterionFeat(self.netFeat(self.real_A), self.netFeat(self.fake_B)).parameters())
 
         # Perceptual Loss on Image Level
+        #print('\nself.fake_B info: ', self.fake_B.shape)
+
         self.feat_loss_AfB = self.criterionFeat(self.netFeat(self.real_A), self.netFeat(self.fake_B)) * lambda_feat_AfB    
         self.feat_loss_BfA = self.criterionFeat(self.netFeat(self.real_B), self.netFeat(self.fake_A)) * lambda_feat_BfA
 
@@ -271,13 +273,23 @@ class CycleGANModel(BaseModel):
         #print('self.fake_B_transformed: ', self.fake_B_transformed.shape)
         # self.list_cones_syn = self.crop_img_by_bbox(self.fake_B_transformed, self.A_targets)
         # self.list_cones_real = self.crop_img_by_bbox(self.real_B, self.B_targets)
-        self.A_boxes = get_label(self.A_path)
+        #print('A_path: ', self.A_path[0].rstrip())
+        #with torch.no_grad():
+        self.A_img_path = self.A_path[0].rstrip()
+        self.A_label_path = img_path2label_path(self.A_img_path, synthetic=True)
+        #print('\nself.A_label_path: ', self.A_label_path)
+        self.A_boxes = get_label(self.A_label_path)
         self.A_boxes_rescaled = bbox_rescale(self.A_boxes, 416)
+        #print('\nself.fake_B_transformed: ', self.fake_B_transformed.shape)
         self.fake_B_cones = crop_object_by_bbox(self.fake_B_transformed, self.A_boxes_rescaled)
 
-        self.B_boxes = get_label(self.B_path)
+        self.B_img_path = self.B_path[0].rstrip()
+        self.B_label_path = img_path2label_path(self.B_img_path, synthetic=False)
+        #print('\nself.B_label_path: ', self.B_label_path)
+        self.B_boxes = get_label(self.B_label_path)
         self.B_boxes_rescaled = bbox_rescale(self.B_boxes, 416)
-        self.B_resized = resize_img(self.input_B, 416)
+        self.B_resized = resize(self.input_B, 416)
+        #print('\nself.B_resized: ', self.B_resized.shape)
         self.real_B_cones = crop_object_by_bbox(self.B_resized, self.B_boxes_rescaled)
 
         # Extract traffic cones features 
@@ -287,25 +299,43 @@ class CycleGANModel(BaseModel):
 
         # self.feat_cone_reals = torch.stack([self.netFeat(cone_real) for cone_real in self.list_cones_real], dim=0)
         # self.feat_cone_real_1d = self.feat_cone_reals.mean(dim=0)
-
-        self.fake_B_cones_features = torch.stack([self.netFeat(con_syn) for cone_syn in self.fake_B_cones], dim=0)
+        
+        fake_B_cones_feat_ = []
+        for cone_syn in self.fake_B_cones:
+            #print('\ncone fake info: ', cone_syn.shape)
+            cone_syn_resized = resize(cone_syn, 360)
+            #print('\ncone_syn_reseized fake B: ', cone_syn_resized.shape)
+            fake_B_cones_feat_.append(self.netFeat(cone_syn_resized))
+        self.fake_B_cones_features = torch.stack(fake_B_cones_feat_, dim=0)
         self.fake_B_cones_feature_mean = self.fake_B_cones_features.mean(dim=0)
+        #print('\nself.fake_B_cones_feature_mean: ', self.fake_B_cones_feature_mean.shape)
 
-        self.real_B_cones_features = torch.stack([self.netFeat(cone_real) for cone_real in self.real_B_cones], dim=0)
+        real_B_cones_feat_ = []
+        # cropped_cone_path = '/home/basic/cyclegan/data/tmp_cones/'
+        # i = 0
+        for cone_real in self.real_B_cones:
+            #i += 1
+            #print('\ncone_real B: ', cone_real.shape)
+            cone_real_resized = resize(cone_real, 360)
+            # save_traffic_cone(cone_real_resized[0], cropped_cone_path, i)
+            # print('\ncone_real_resized: ', cone_syn_resized[0].shape)
+            real_B_cones_feat_.append(self.netFeat(cone_real_resized))
+            #self.real_B_cones_features = torch.stack([self.netFeat(cone_real_resized)], dim=0)
+        self.real_B_cones_features = torch.stack(real_B_cones_feat_, dim=0)
         self.real_B_cones_features_mean = self.real_B_cones_features.mean(dim=0)
 
         # Perceptual Loss at Object Level
         # self.feat_loss_object_level = self.criterionFeat(self.feat_cone_syn_1d, self.feat_cone_real_1d)
         self.feat_loss_object_level = self.criterionFeat(self.fake_B_cones_feature_mean, self.real_B_cones_features_mean)
 
-        with torch.no_grad():
+        #with torch.no_grad():
             #self.yolo_loss, _ = self.YOLO3(self.fake_B_transformed, self.A_targets[0]) # create self.targets, this only worked for batchSize = 1
-            self.yolo_loss, _ = self.YOLO3(self.fake_B_transformed, self.A_targets) # create self.targets
+        self.yolo_loss, _ = self.YOLO3(self.fake_B_transformed, self.A_targets) # create self.targets
 
         # combined loss
         self.loss_G = self.loss_G_A + self.loss_G_B + self.loss_cycle_A \
                     + self.loss_cycle_B + self.loss_idt_A + self.loss_idt_B \
-                    + self.feat_loss \ 
+                    + self.feat_loss \
                     + self.yolo_loss * 10 \
                     + self.feat_loss_object_level * 20 
 
