@@ -280,8 +280,9 @@ class CycleGANModel(BaseModel):
         #print('\nself.A_label_path: ', self.A_label_path)
         self.A_boxes = get_label(self.A_label_path)
         self.A_boxes_rescaled = bbox_rescale(self.A_boxes, 416)
-        #print('\nself.fake_B_transformed: ', self.fake_B_transformed.shape)
-        self.fake_B_cones = crop_object_by_bbox(self.fake_B_transformed, self.A_boxes_rescaled)
+        self.fake_B_resized = resize(self.fake_B, 416)
+        #print('\nself.fake_B_resized: ', self.fake_B_resized.shape)
+        self.fake_B_cones = crop_object_by_bbox(self.fake_B_resized, self.A_boxes_rescaled)
 
         self.B_img_path = self.B_path[0].rstrip()
         self.B_label_path = img_path2label_path(self.B_img_path, synthetic=False)
