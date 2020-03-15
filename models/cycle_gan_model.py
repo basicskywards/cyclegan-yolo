@@ -14,7 +14,7 @@ from yolo.utils.datasets import pad_to_square, resize
 import torchvision.transforms as transforms
 from torchvision.utils import save_image
 import torch.nn.functional as F
-from data.crop_bboxes import bbox_rescale, resize_img, crop_object_by_bbox, save_traffic_cone
+from data.crop_bboxes import bbox_rescale, resize_img, crop_object_by_bbox, save_traffic_cone, get_label
 
 def mse_loss(input, target):
     return torch.sum((input - target)**2) / input.data.nelement()
@@ -133,8 +133,12 @@ class CycleGANModel(BaseModel):
         self.image_paths = input['A_paths' if AtoB else 'B_paths']
         #print('\nA path: ', self.image_paths)
         self.A_targets = input['A_targets'] # prepared yolo taragets of A (synthesis traffic cones)
-        self.B_targets = input['B_targets'] # get bboxes of B_img to crop traffic cones
+        #self.B_targets = input['B_targets'] # get bboxes of B_img to crop traffic cones
         #self.targets = input['target_batch'] # see unaligned_dataset.py & dataloader YOLOv3
+
+        # For bbox crop
+        self.A_path = input['A_paths']
+        self.B_path = input['B_paths']
 
     def forward(self):
         self.real_A = Variable(self.input_A)
@@ -267,6 +271,14 @@ class CycleGANModel(BaseModel):
         #print('self.fake_B_transformed: ', self.fake_B_transformed.shape)
         # self.list_cones_syn = self.crop_img_by_bbox(self.fake_B_transformed, self.A_targets)
         # self.list_cones_real = self.crop_img_by_bbox(self.real_B, self.B_targets)
+        self.A_boxes = get_label(self.A_path)
+        self.A_boxes_rescaled = bbox_rescale(self.A_boxes, 416)
+        self.fake_B_cones = crop_object_by_bbox(self.fake_B_transformed, self.A_boxes_rescaled)
+
+        self.B_boxes = get_label(self.B_path)
+        self.B_boxes_rescaled = bbox_rescale(self.B_boxes, 416)
+        self.B_resized = resize_img(self.input_B, 416)
+        self.real_B_cones = crop_object_by_bbox(self.B_resized, self.B_boxes_rescaled)
 
         # Extract traffic cones features 
   
@@ -276,10 +288,15 @@ class CycleGANModel(BaseModel):
         # self.feat_cone_reals = torch.stack([self.netFeat(cone_real) for cone_real in self.list_cones_real], dim=0)
         # self.feat_cone_real_1d = self.feat_cone_reals.mean(dim=0)
 
-        
+        self.fake_B_cones_features = torch.stack([self.netFeat(con_syn) for cone_syn in self.fake_B_cones], dim=0)
+        self.fake_B_cones_feature_mean = self.fake_B_cones_features.mean(dim=0)
+
+        self.real_B_cones_features = torch.stack([self.netFeat(cone_real) for cone_real in self.real_B_cones], dim=0)
+        self.real_B_cones_features_mean = self.real_B_cones_features.mean(dim=0)
+
         # Perceptual Loss at Object Level
         # self.feat_loss_object_level = self.criterionFeat(self.feat_cone_syn_1d, self.feat_cone_real_1d)
-
+        self.feat_loss_object_level = self.criterionFeat(self.fake_B_cones_feature_mean, self.real_B_cones_features_mean)
 
         with torch.no_grad():
             #self.yolo_loss, _ = self.YOLO3(self.fake_B_transformed, self.A_targets[0]) # create self.targets, this only worked for batchSize = 1
@@ -287,10 +304,10 @@ class CycleGANModel(BaseModel):
 
         # combined loss
         self.loss_G = self.loss_G_A + self.loss_G_B + self.loss_cycle_A \
-                    + self.loss_cycle_B + self.loss_idt_A + self.loss_idt_B #\
-                    # + self.feat_loss \
-                    # + self.yolo_loss * 10 \
-                    # + self.feat_loss_object_level * 20 
+                    + self.loss_cycle_B + self.loss_idt_A + self.loss_idt_B \
+                    + self.feat_loss \ 
+                    + self.yolo_loss * 10 \
+                    + self.feat_loss_object_level * 20 
 
         self.loss_G.backward()
 

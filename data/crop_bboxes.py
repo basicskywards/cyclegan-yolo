@@ -67,18 +67,18 @@ import torch
 
 
 #---------------------------------
-def get_img_label_paths(img_path_txt):
+def get_img_label_paths(img_path_txt, synthetic=True):
 	with open(img_path_txt, "r") as file:
 		img_files = file.readlines()
 
 	label_files = []
 	for path in img_files:
 		img_id = path.split('/')[-1].split('.')[0]
-		# synthetic
-		label_path_tmp = '/home/basic/PyTorch-YOLOv3/data/traffic_cones_syn_yololoss/labels/'
-		
+		if synthetic:
+			label_path_tmp = '/home/basic/PyTorch-YOLOv3/data/traffic_cones_syn_yololoss/labels/'
+		else:
 		# real
-		#label_path_tmp = '/home/basic/PyTorch-YOLOv3/data/traffic_cones/labels/'
+			label_path_tmp = '/home/basic/PyTorch-YOLOv3/data/traffic_cones/labels/'
 
 		label_path = label_path_tmp + img_id + '.txt'
 		label_files.append(label_path)
