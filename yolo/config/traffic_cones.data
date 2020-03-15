@@ -1,0 +1,4 @@
+classes= 1
+train=data/traffic_cones/train.txt
+valid=data/traffic_cones/test.txt
+names=data/traffic_cones/classes.names
