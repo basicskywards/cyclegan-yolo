@@ -14,7 +14,7 @@ from yolo.utils.datasets import pad_to_square, resize
 import torchvision.transforms as transforms
 from torchvision.utils import save_image
 import torch.nn.functional as F
-
+from data.crop_bboxes import bbox_rescale, resize_img, crop_object_by_bbox, save_traffic_cone
 
 def mse_loss(input, target):
     return torch.sum((input - target)**2) / input.data.nelement()
