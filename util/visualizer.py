@@ -132,8 +132,10 @@ class Visualizer():
         # for image_numpy in visuals['fake_B']:
             if label == 'fake_B':
                 # image_name = '%s_%s.png' % (name, label)
-                folder_path = 'photorealisstic/'
-                image_name = folder_path + '%s.png' % (name)
+                # folder_path = 'photorealistic/'
+                # image_name = folder_path + '%s.png' % (name)
+                image_name = '%s.png' % (name)
+
 
                 save_path = os.path.join(image_dir, image_name)
                 # print(save_path)

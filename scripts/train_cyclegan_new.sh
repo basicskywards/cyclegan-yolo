@@ -1,0 +1,1 @@
+python3 train.py --dataroot /media/basic/ssd256/cyclegan_data/ --name ssim_loss --model cycle_gan --no_dropout --yolo_weight /home/basic/cyclegan_heavy_data/yolo/checkpoints/yolov3_ckpt_35.pth

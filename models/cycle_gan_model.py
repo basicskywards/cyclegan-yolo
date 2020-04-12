@@ -18,6 +18,7 @@ import torchvision.transforms as transforms
 from torchvision.utils import save_image
 import torch.nn.functional as F
 from data.crop_bboxes import bbox_rescale, resize_img, crop_object_by_bbox, save_traffic_cone, get_label, img_path2label_path, get_img_label_paths2, get_img_path, get_img
+import pytorch_ssim
 
 
 def get_fixed_features():
@@ -63,19 +64,27 @@ def get_fixed_features():
     list_cones = crop_object_by_bbox(img_resized, boxes_rescaled) 
 
     real_B_cones_feat_ = []
+    cones_ = []
     for i, cone in enumerate(list_cones):
         #save_traffic_cone(cone, cropped_cone_path, i)
+        #cone_ = resize(cone, 360)
         cone_real_resized = resize_img(cone, 360)
+
         cone_real_resized = cone_real_resized.unsqueeze(0)
         #print('\nshape: ', cone_real_resized.shape)
         cone_feat = netFeat(cone_real_resized.cuda())
         real_B_cones_feat_.append(cone_feat)
+        cones_.append(cone_real_resized)
+        
+    cones_mean = torch.stack(cones_, dim=0)
+    cones_mean = cones_mean.mean(dim=0)
+    # cones_mean = cones_mean.unsqueeze(0)
 
     real_B_cones_features = torch.stack(real_B_cones_feat_, dim=0)
     real_B_cones_features_mean = real_B_cones_features.mean(dim=0)
-
-    return real_B_cones_features_mean
-
+    #print('cones_mean get_fixed_features: ', cones_mean.shape)
+    return real_B_cones_features_mean, cones_mean.cuda()
+    
 def mse_loss(input, target):
     return torch.sum((input - target)**2) / input.data.nelement()
 
@@ -157,6 +166,8 @@ class CycleGANModel(BaseModel):
             self.criterionCycle = torch.nn.L1Loss()
             self.criterionIdt = torch.nn.L1Loss()
             self.criterionFeat = mse_loss
+            self.ssim_loss = pytorch_ssim.SSIM()
+
             # yolo data transform
             self.yolo_data_transform = yolo_data_transform
 
@@ -296,6 +307,7 @@ class CycleGANModel(BaseModel):
         # print ('self.netFeat(self.fake_B).parameters()', self.netFeat(self.fake_B).parameters())
         # print ('self.criterionFeat(self.netFeat(self.real_A), self.netFeat(self.fake_B)).parameters()', self.criterionFeat(self.netFeat(self.real_A), self.netFeat(self.fake_B)).parameters())
 
+
         # Perceptual Loss on Image Level
         #print('\nself.fake_B info: ', self.fake_B.shape)
 
@@ -311,7 +323,14 @@ class CycleGANModel(BaseModel):
         self.feat_loss = self.feat_loss_AfB + self.feat_loss_BfA + self.feat_loss_fArecB + self.feat_loss_fBrecA + self.feat_loss_ArecA + self.feat_loss_BrecB
 
 
-        
+        ####### SSIM Loss on Image level
+        self.ssim_syn = 1 - self.ssim_loss(self.real_A, self.rec_A)
+        self.ssim_real = 1 - self.ssim_loss(self.real_B, self.rec_B)
+        self.ssim_img = 0.5 * (self.ssim_syn + self.ssim_real)
+
+        # print('\nreal A: ', self.real_A.shape)
+        # print('rec A: ', self.rec_A.shape)
+
         ###### yolov3 loss (regression + classification) #####
         # print('\nself.fake_B = ', self.fake_B.shape)
         self.fake_B_transformed = self.yolo_data_transform(self.fake_B)
@@ -364,12 +383,21 @@ class CycleGANModel(BaseModel):
         
 
         # get traffic cones from transferred images
+            # 1. compute cone feature mean
+            # 2. compute cone SSIM mean
         fake_B_cones_feat_ = []
+        cones_syn_ = []
         for cone_syn in self.fake_B_cones:
             #print('\ncone fake info: ', cone_syn.shape)
             cone_syn_resized = resize(cone_syn, 360)
+            cones_syn_.append(cone_syn_resized)
+
             #print('\ncone_syn_reseized fake B: ', cone_syn_resized.shape)
             fake_B_cones_feat_.append(self.netFeat(cone_syn_resized))
+
+        self.cones_syn_mean = torch.stack(cones_syn_, dim=0)
+        self.cones_syn_mean = self.cones_syn_mean.mean(dim=0)
+
         self.fake_B_cones_features = torch.stack(fake_B_cones_feat_, dim=0)
         self.fake_B_cones_feature_mean = self.fake_B_cones_features.mean(dim=0)
         #print('\nself.fake_B_cones_feature_mean: ', self.fake_B_cones_feature_mean.shape)
@@ -390,9 +418,14 @@ class CycleGANModel(BaseModel):
         # self.real_B_cones_features = torch.stack(real_B_cones_feat_, dim=0)
         # self.real_B_cones_features_mean = self.real_B_cones_features.mean(dim=0)
 
-        self.real_B_cones_features_mean = get_fixed_features()
+        self.real_B_cones_features_mean, self.cones_real_mean = get_fixed_features()
 
-        # Perceptual Loss at Object Level
+        ###### SSIM at object level
+        # print('\ncones_syn_mean: ', self.cones_syn_mean.shape)
+        # print('cones_real_mean: ', self.cones_real_mean.shape)
+        self.ssim_obj = 1 - self.ssim_loss(self.cones_syn_mean, self.cones_real_mean)
+
+        ###### Perceptual Loss at Object Level
         # self.feat_loss_object_level = self.criterionFeat(self.feat_cone_syn_1d, self.feat_cone_real_1d)
         self.feat_loss_object_level = self.criterionFeat(self.fake_B_cones_feature_mean, self.real_B_cones_features_mean)
 
@@ -404,8 +437,10 @@ class CycleGANModel(BaseModel):
         self.loss_G = self.loss_G_A + self.loss_G_B + self.loss_cycle_A \
                     + self.loss_cycle_B + self.loss_idt_A + self.loss_idt_B \
                     + self.feat_loss \
-                    + self.yolo_loss * 10 \
-                    + self.feat_loss_object_level * 2#20 
+                    + self.yolo_loss * 1 \
+                    + self.feat_loss_object_level * 1 \
+                    + self.ssim_img \
+                    #+ self.ssim_obj
 
         self.loss_G.backward()
 
@@ -435,11 +470,14 @@ class CycleGANModel(BaseModel):
         yolo_loss = self.yolo_loss.data 
         traffic_loss = self.feat_loss_object_level.data
         loss_G = self.loss_G.data
+        ssim_img = self.ssim_img.data
+        ssim_obj = self.ssim_obj.data
+
         if self.opt.identity > 0.0:
             idt_A = self.loss_idt_A.data#[0]
             idt_B = self.loss_idt_B.data#[0]
             return OrderedDict([('D_A', D_A), ('G_A', G_A), ('Cyc_A', Cyc_A), ('idt_A', idt_A),
-                                ('D_B', D_B), ('G_B', G_B), ('Cyc_B', Cyc_B), ('idt_B', idt_B), ('yolo_loss', yolo_loss), ('traffic_loss', traffic_loss), ('loss_G', loss_G)])
+                                ('D_B', D_B), ('G_B', G_B), ('Cyc_B', Cyc_B), ('idt_B', idt_B), ('yolo_loss', yolo_loss), ('traffic_loss', traffic_loss), ('loss_G', loss_G), ('ssim_img', ssim_img), ('ssim_obj', ssim_obj)])
         else:
             return OrderedDict([('D_A', D_A), ('G_A', G_A), ('Cyc_A', Cyc_A),
                                 ('D_B', D_B), ('G_B', G_B), ('Cyc_B', Cyc_B), ('yolo_loss', yolo_loss), ('traffic_loss', traffic_loss),('loss_G', loss_G)])
