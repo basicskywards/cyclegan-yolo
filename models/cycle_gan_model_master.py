@@ -1,6 +1,3 @@
-# fixed traffic cone features
-
-
 import numpy as np
 import torch
 import os
@@ -17,64 +14,7 @@ from yolo.utils.datasets import pad_to_square, resize
 import torchvision.transforms as transforms
 from torchvision.utils import save_image
 import torch.nn.functional as F
-from data.crop_bboxes import bbox_rescale, resize_img, crop_object_by_bbox, save_traffic_cone, get_label, img_path2label_path, get_img_label_paths2, get_img_path, get_img
-
-
-def get_fixed_features():
-    # randomly pick 1 imgage in sunny folder
-    # crop traffic cones
-    # feed into resnet
-    # compute mean
-
-    which_model_feat = 'resnet34'
-    gpu_ids = [0]
-    netFeat = networks.define_feature_network(which_model_feat, gpu_ids)
-    # get fixed traffic cone features
-    folder_img = '/media/basic/ssd256/traffic_cone_real/images/sunny/*.*'
-    img_path_txt = get_img_path(folder_img)
-
-    # synthetic images
-    #img_path_txt = '/media/basic/ssd256/cyclegan_data/A_train.txt'
-    
-    # real images
-    #img_path_txt = '/media/basic/ssd256/cyclegan_data/B_train.txt'
-
-    # save path
-    #cropped_cone_path = '/home/basic/cyclegan/data/tmp_cones/'
-
-
-
-    img_files, label_files = get_img_label_paths2(img_path_txt, False)
-    idx = np.random.randint(0, 10) 
-
-    img_txt = img_files[idx].rstrip()
-    label_txt = label_files[idx].rstrip()
-
-    #print('img_txt, label_txt: ', img_txt, label_txt)
-    img = get_img(img_txt)
-    img_resized = resize_img(img, 416)
-    #print('img: ', img.shape)
-    #print('img_resized: ', img_resized.shape)
-    boxes = get_label(label_txt)
-
-    
-
-    boxes_rescaled = bbox_rescale(boxes, 416)
-    list_cones = crop_object_by_bbox(img_resized, boxes_rescaled) 
-
-    real_B_cones_feat_ = []
-    for i, cone in enumerate(list_cones):
-        #save_traffic_cone(cone, cropped_cone_path, i)
-        cone_real_resized = resize_img(cone, 360)
-        cone_real_resized = cone_real_resized.unsqueeze(0)
-        #print('\nshape: ', cone_real_resized.shape)
-        cone_feat = netFeat(cone_real_resized.cuda())
-        real_B_cones_feat_.append(cone_feat)
-
-    real_B_cones_features = torch.stack(real_B_cones_feat_, dim=0)
-    real_B_cones_features_mean = real_B_cones_features.mean(dim=0)
-
-    return real_B_cones_features_mean
+from data.crop_bboxes import bbox_rescale, resize_img, crop_object_by_bbox, save_traffic_cone, get_label, img_path2label_path
 
 def mse_loss(input, target):
     return torch.sum((input - target)**2) / input.data.nelement()
@@ -344,15 +284,14 @@ class CycleGANModel(BaseModel):
         #print('\nself.fake_B_resized: ', self.fake_B_resized.shape)
         self.fake_B_cones = crop_object_by_bbox(self.fake_B_resized, self.A_boxes_rescaled)
 
-        # comment here
-        # self.B_img_path = self.B_path[0].rstrip()
-        # self.B_label_path = img_path2label_path(self.B_img_path, synthetic=False)
-        # #print('\nself.B_label_path: ', self.B_label_path)
-        # self.B_boxes = get_label(self.B_label_path)
-        # self.B_boxes_rescaled = bbox_rescale(self.B_boxes, 416)
-        # self.B_resized = resize(self.input_B, 416)
-        # #print('\nself.B_resized: ', self.B_resized.shape)
-        # self.real_B_cones = crop_object_by_bbox(self.B_resized, self.B_boxes_rescaled)
+        self.B_img_path = self.B_path[0].rstrip()
+        self.B_label_path = img_path2label_path(self.B_img_path, synthetic=False)
+        #print('\nself.B_label_path: ', self.B_label_path)
+        self.B_boxes = get_label(self.B_label_path)
+        self.B_boxes_rescaled = bbox_rescale(self.B_boxes, 416)
+        self.B_resized = resize(self.input_B, 416)
+        #print('\nself.B_resized: ', self.B_resized.shape)
+        self.real_B_cones = crop_object_by_bbox(self.B_resized, self.B_boxes_rescaled)
 
         # Extract traffic cones features 
   
@@ -376,21 +315,19 @@ class CycleGANModel(BaseModel):
 
 
         # get traffic cones from real images (e.g. sunny)
-        # real_B_cones_feat_ = []
-        # # cropped_cone_path = '/home/basic/cyclegan/data/tmp_cones/'
-        # # i = 0
-        # for cone_real in self.real_B_cones:
-        #     #i += 1
-        #     #print('\ncone_real B: ', cone_real.shape)
-        #     cone_real_resized = resize(cone_real, 360)
-        #     # save_traffic_cone(cone_real_resized[0], cropped_cone_path, i)
-        #     # print('\ncone_real_resized: ', cone_syn_resized[0].shape)
-        #     real_B_cones_feat_.append(self.netFeat(cone_real_resized))
-        #     #self.real_B_cones_features = torch.stack([self.netFeat(cone_real_resized)], dim=0)
-        # self.real_B_cones_features = torch.stack(real_B_cones_feat_, dim=0)
-        # self.real_B_cones_features_mean = self.real_B_cones_features.mean(dim=0)
-
-        self.real_B_cones_features_mean = get_fixed_features()
+        real_B_cones_feat_ = []
+        # cropped_cone_path = '/home/basic/cyclegan/data/tmp_cones/'
+        # i = 0
+        for cone_real in self.real_B_cones:
+            #i += 1
+            #print('\ncone_real B: ', cone_real.shape)
+            cone_real_resized = resize(cone_real, 360)
+            # save_traffic_cone(cone_real_resized[0], cropped_cone_path, i)
+            # print('\ncone_real_resized: ', cone_syn_resized[0].shape)
+            real_B_cones_feat_.append(self.netFeat(cone_real_resized))
+            #self.real_B_cones_features = torch.stack([self.netFeat(cone_real_resized)], dim=0)
+        self.real_B_cones_features = torch.stack(real_B_cones_feat_, dim=0)
+        self.real_B_cones_features_mean = self.real_B_cones_features.mean(dim=0)
 
         # Perceptual Loss at Object Level
         # self.feat_loss_object_level = self.criterionFeat(self.feat_cone_syn_1d, self.feat_cone_real_1d)
@@ -405,7 +342,7 @@ class CycleGANModel(BaseModel):
                     + self.loss_cycle_B + self.loss_idt_A + self.loss_idt_B \
                     + self.feat_loss \
                     + self.yolo_loss * 10 \
-                    + self.feat_loss_object_level * 2#20 
+                    + self.feat_loss_object_level * 20 
 
         self.loss_G.backward()
 

@@ -2,7 +2,12 @@
 # rescale_bbox
 # crop_by_bbox
 # resize
+# extract fixed traffic cone features
 
+from models.networks import define_feature_network
+import torch
+import glob
+from yolo.utils.datasets import pad_to_square, resize 
 
 from PIL import Image
 import torch.nn.functional as F
@@ -99,11 +104,16 @@ def img_path2label_path(img_path, synthetic=True):
 
 
 def get_label(label_path):
+	#print('\nlabel_path: ', label_path, type(label_path))
+	# try:
+
 	if os.path.exists(label_path):
-		#print('\nlabel_path: ', label_path, type(label_path))
+		# print('\nlabel_path: ', label_path, type(label_path))
 		boxes = torch.from_numpy(np.loadtxt(label_path).reshape(-1, 5))
 		#print('\nboxes info: ', boxes)
 	return boxes
+	# except:
+	# 	return False
 
 def get_img(img_path):
 	img = transforms.ToTensor()(Image.open(img_path).convert('RGB'))
@@ -173,27 +183,63 @@ def crop_object_by_bbox(real_img, boxes):
 # define VGG to extract features from cropped traffic cones
 #-----------------------------------------------------------------------------#
 
+def net_features(traffic_cone):
+	which_model_feat = 'resnet34'
+	gpu_ids = 0
+	netFeat = networks.define_feature_network(which_model_feat, gpu_ids)
+	return netFeat(traffic_cone)
 
 
 
 
+def get_img_path(folder_img):
+	img_paths = []
+	#print('test: ', glob.glob(folder_img))
+	for path in glob.glob(folder_img):
+		#print('\n', path)
+		img_paths.append(path)
+
+	return img_paths
+
+def get_img_label_paths2(img_paths, synthetic=True):
+	img_files = img_paths
+
+	label_files = []
+	for path in img_paths:
+		img_id = path.split('/')[-1].split('.')[0]
+		if synthetic:
+			#label_path_tmp = '/home/basic/PyTorch-YOLOv3/data/traffic_cones_syn_yololoss/labels/'
+			label_path_tmp = '/media/basic/ssd256/traffic_cone_syn/labels/'
+		else:
+		# real
+			#label_path_tmp = '/home/basic/PyTorch-YOLOv3/data/traffic_cones/labels/'
+			label_path_tmp = '/media/basic/ssd256/traffic_cone_real/labels/'
+		label_path = label_path_tmp + img_id + '.txt'
+		label_files.append(label_path)
+	return img_files, label_files
 
 
 #-----------------------------------------------------------------------------#
-def main():
+# def main():
+
+def get_fixed_features():
+	# get fixed traffic cone features
+	folder_img = '/media/basic/ssd256/traffic_cone_real/images/sunny/*.png'
+	img_path_txt = get_img_path(folder_img)
+
 	# synthetic images
-	img_path_txt = '/media/basic/ssd256/cyclegan_data/A_train.txt'
+	#img_path_txt = '/media/basic/ssd256/cyclegan_data/A_train.txt'
 	
 	# real images
 	#img_path_txt = '/media/basic/ssd256/cyclegan_data/B_train.txt'
 
 	# save path
-	cropped_cone_path = '/home/basic/cyclegan/data/tmp_cones/'
+	#cropped_cone_path = '/home/basic/cyclegan/data/tmp_cones/'
 
 
 
-	img_files, label_files = get_img_label_paths(img_path_txt)
-	idx = 20 
+	img_files, label_files = get_img_label_paths2(img_path_txt, False)
+	idx = np.random.randint(0, len(img_files)) 
 
 	img_txt = img_files[idx].rstrip()
 	label_txt = label_files[idx].rstrip()
@@ -206,8 +252,19 @@ def main():
 	boxes = get_label(label_txt)
 	boxes_rescaled = bbox_rescale(boxes, 416)
 	list_cones = crop_object_by_bbox(img_resized, boxes_rescaled) 
+
+	real_B_cones_feat_ = []
 	for i, cone in enumerate(list_cones):
-		save_traffic_cone(cone, cropped_cone_path, i)
+		#save_traffic_cone(cone, cropped_cone_path, i)
+		cone_real_resized = resize(cone_real, 360)
+		cone_feat = net_features(cone_real_resized)
+		real_B_cones_feat_.append(cone_feat)
+
+	real_B_cones_features = torch.stack(real_B_cones_feat_, dim=0)
+	real_B_cones_features_mean = real_B_cones_features.mean(dim=0)
+
+	return real_B_cones_features_mean
 
 if __name__ == '__main__':
-	main()
+	# main()
+	print(get_fixed_features())
