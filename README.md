@@ -1,12 +1,11 @@
-<img src='imgs/*.jpg'>
-<img src='imgs/*.jpg'>
 
 # CycleGAN with Perceptual Loss and Distillation Loss using YOLO
 - To close domain gap between the synthetic traffic cones and the real ones, first perceptual loss is added to CycleGAN. Next, distillation loss is used to enforce the CycleGAN to mimic the real traffic cones via a pretrained YOLO.
+<img src='imgs/night2day.png'>
 
+
+---------------------------
 This repo is inspired from Clarifying Rainy traffic photos. You can check the presentation of the first results [here](https://docs.google.com/presentation/d/1rKt87ZeBKS8gvSJMc8Zb_zrjSqcQEckGH3Msi_sgxX4/edit?usp=sharing)
-
-
 
 ## Prerequisites
 - Linux or OSX.
