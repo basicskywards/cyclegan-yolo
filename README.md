@@ -1,7 +1,7 @@
 
 # Scene Adaptation using CycleGAN with Perceptual Loss and Distillation Loss using YOLO
 - To close domain gap between the synthetic traffic cones and the real ones, first perceptual loss is added to CycleGAN. Next, distillation loss is used to enforce the CycleGAN to mimic the real traffic cones via a pretrained YOLO.
-- An example result - transferring night to day scene of traffic cones.
+- An example result - transferring **night** to **day** scene of traffic cones.
 <img src='imgs/night2day.png'>
 
 
